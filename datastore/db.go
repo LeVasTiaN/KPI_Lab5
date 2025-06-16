@@ -302,6 +302,8 @@ func (db *Db) processRecovery(file *os.File, segment *Segment) error {
 	var buffer [bufferSize]byte
 	var currentOffset int64
 
+	tempIndex := make(map[string]int64)
+
 	reader := bufio.NewReaderSize(file, bufferSize)
 	for err == nil {
 		var header, data []byte
@@ -310,14 +312,14 @@ func (db *Db) processRecovery(file *os.File, segment *Segment) error {
 		header, err = reader.Peek(bufferSize)
 		if err == io.EOF {
 			if len(header) == 0 {
-				return err
+				break
 			}
 		} else if err != nil {
 			return err
 		}
 
 		if len(header) < 4 {
-			return io.EOF
+			break
 		}
 
 		recordSize := binary.LittleEndian.Uint32(header)
@@ -346,13 +348,16 @@ func (db *Db) processRecovery(file *os.File, segment *Segment) error {
 				continue
 			}
 
-			segment.mu.Lock()
-			segment.keyIndex[record.key] = currentOffset
-			segment.mu.Unlock()
-
+			tempIndex[record.key] = currentOffset
 			currentOffset += int64(bytesRead)
 		}
 	}
+
+	segment.mu.Lock()
+	for key, position := range tempIndex {
+		segment.keyIndex[key] = position
+	}
+	segment.mu.Unlock()
 
 	if segment == db.getCurrentSegment() {
 		db.currentOffset = currentOffset

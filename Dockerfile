@@ -1,4 +1,4 @@
-FROM golang:1.24 as build
+FROM golang:1.24 AS build
 WORKDIR /go/src/practice-4
 COPY . .
 RUN go test ./...
