@@ -1,7 +1,5 @@
-FROM golang:1.24 AS build
-
-WORKDIR /go/src/practice-4
+FROM golang:1.24
+WORKDIR /app
 COPY . .
-
-ENV INTEGRATION_TEST=1
-ENTRYPOINT ["go", "test", "./integration"]
+RUN go mod tidy
+CMD ["go", "test", "-v", "./integration"]
