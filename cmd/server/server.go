@@ -28,7 +28,7 @@ func getPort() int {
 const (
 	confResponseDelaySec = "CONF_RESPONSE_DELAY_SEC"
 	confHealthFailure    = "CONF_HEALTH_FAILURE"
-	teamName             = "crosshell-team" 
+	teamName             = "osb"
 	dbServiceURL         = "http://db:8083/db/"
 )
 
