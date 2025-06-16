@@ -74,11 +74,27 @@ func createDb(directory string, maxSegmentSize int64) (*Db, error) {
 		writeOperations: make(chan WriteOperation, 100),
 	}
 
-	if err := database.initializeNewSegment(); err != nil {
+	files, err := os.ReadDir(directory)
+	if err != nil {
 		return nil, err
+	}
+	for _, file := range files {
+		if file.IsDir() || !file.Type().IsRegular() || !filepath.HasPrefix(file.Name(), dataFileName) {
+			continue
+		}
+		path := filepath.Join(directory, file.Name())
+		segment := &Segment{
+			path:     path,
+			keyIndex: make(keyIndex),
+		}
+		database.segments = append(database.segments, segment)
 	}
 
 	if err := database.recoverAllSegments(); err != nil && err != io.EOF {
+		return nil, err
+	}
+
+	if err := database.initializeNewSegment(); err != nil {
 		return nil, err
 	}
 
@@ -230,7 +246,7 @@ func (db *Db) compactOldSegments() {
 
 		for key, position := range segment.keyIndex {
 			if !keysWritten[key] {
-				value, err := segment.readFromSegment(position)
+				value, err := segment.readFromSegmentWithChecksum(position)
 				if err != nil {
 					continue
 				}
@@ -253,7 +269,7 @@ func (db *Db) compactOldSegments() {
 
 	newSegments := []*Segment{compactedSegment, db.segments[len(db.segments)-1]}
 	for i := 0; i < len(db.segments)-1; i++ {
-		os.Remove(db.segments[i].path)
+		_ = os.Remove(db.segments[i].path)
 	}
 
 	db.segments = newSegments
@@ -324,6 +340,12 @@ func (db *Db) processRecovery(file *os.File, segment *Segment) error {
 			var record entry
 			record.Decode(data)
 
+			if checksumErr := record.verifyChecksum(); checksumErr != nil {
+				fmt.Printf("Warning: corrupted entry found during recovery for key '%s': %v\n", record.key, checksumErr)
+				currentOffset += int64(bytesRead)
+				continue
+			}
+
 			segment.mu.Lock()
 			segment.keyIndex[record.key] = currentOffset
 			segment.mu.Unlock()
@@ -384,7 +406,7 @@ func (db *Db) Get(key string) (string, error) {
 		return "", fmt.Errorf("key not found in datastore")
 	}
 
-	value, err := location.segment.readFromSegment(location.position)
+	value, err := location.segment.readFromSegmentWithChecksum(location.position)
 	if err != nil {
 		return "", err
 	}
@@ -439,5 +461,27 @@ func (segment *Segment) readFromSegment(position int64) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return value, nil
+}
+
+func (segment *Segment) readFromSegmentWithChecksum(position int64) (string, error) {
+	file, err := os.Open(segment.path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	_, err = file.Seek(position, 0)
+	if err != nil {
+		return "", err
+	}
+
+	reader := bufio.NewReader(file)
+
+	value, err := readValue(reader)
+	if err != nil {
+		return "", fmt.Errorf("checksum verification failed: %w", err)
+	}
+
 	return value, nil
 }
