@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/roman-mazur/architecture-practice-4-template/httptools"
-	"github.com/roman-mazur/architecture-practice-4-template/signal"
+	"github.com/LeVasTiaN/KPI_Lab5/httptools"
+	"github.com/LeVasTiaN/KPI_Lab5/signal"
 )
 
 var port = flag.Int("port", 8080, "server port")
